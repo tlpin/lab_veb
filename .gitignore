@@ -1,0 +1,25 @@
+# Переменные окружения (содержат пароли!)
+.env
+
+# Бинарные файлы Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+
+# Тестовые файлы
+*.test
+*.out
+test.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

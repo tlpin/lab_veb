@@ -1,25 +1,37 @@
 package main
 
 import (
-	"time"
+	"log"
+	"newyear-api/controllers"
+	"newyear-api/database"
+	"newyear-api/repositories"
+	"newyear-api/routes"
+	"newyear-api/services"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	// Подключение к БД
+	db, err := database.Connect()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
 
-	router := gin.Default()
+	// Инициализация слоев
+	collectibleRepo := repositories.NewCollectibleRepository(db)
+	collectibleService := services.NewCollectibleService(collectibleRepo)
+	collectibleController := controllers.NewCollectibleController(collectibleService)
 
-	router.GET("/info", func(c *gin.Context) {
-		now := time.Now()
-		newYear := time.Date(now.Year()+1, time.January, 1, 0, 0, 0, 0, time.Local)
-		days := int(newYear.Sub(now).Hours() / 24)
+	// Настройка роутера
+	r := gin.Default()
 
-		c.JSON(200, gin.H{
-			"days_before_new_year": days,
-		})
-	})
+	// Регистрация маршрутов
+	routes.SetupRoutes(r, collectibleController)
 
-	router.Run(":4200")
-
+	// Запуск сервера
+	log.Println("Server starting on :4200")
+	if err := r.Run(":4200"); err != nil {
+		log.Fatal("Failed to start server:", err)
+	}
 }
