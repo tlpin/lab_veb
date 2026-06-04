@@ -1,25 +1,17 @@
 package models
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-)
+import "time"
 
 type Collectible struct {
-	ID        string         `gorm:"type:uuid;primaryKey" json:"id"`
-	Name      string         `gorm:"not null" json:"name"`
-	Year      int            `gorm:"not null" json:"year"`
-	Country   string         `gorm:"not null" json:"country"`
-	Price     float64        `gorm:"not null" json:"price"`
-	Condition string         `gorm:"default:'excellent'" json:"condition"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
-}
-
-func (c *Collectible) BeforeCreate(tx *gorm.DB) error {
-	c.ID = uuid.New().String()
-	return nil
+	ID        string     `bson:"_id" json:"id"`
+	UserID    string     `bson:"user_id" json:"user_id"`
+	User      User       `bson:"-" json:"-"`
+	Name      string     `bson:"name" json:"name"`
+	Year      int        `bson:"year" json:"year"`
+	Country   string     `bson:"country" json:"country"`
+	Price     float64    `bson:"price" json:"price"`
+	Condition string     `bson:"condition" json:"condition"`
+	CreatedAt time.Time  `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time  `bson:"updated_at" json:"updated_at"`
+	DeletedAt *time.Time `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 }

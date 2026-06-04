@@ -1,32 +1,74 @@
 package repositories
 
 import (
+	"context"
+	"time"
+
 	"newyear-api/models"
 
-	"gorm.io/gorm"
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type CollectibleRepository struct {
-	db *gorm.DB
+	collection *mongo.Collection
 }
 
-func NewCollectibleRepository(db *gorm.DB) *CollectibleRepository {
-	return &CollectibleRepository{db: db}
+func NewCollectibleRepository(db *mongo.Database) *CollectibleRepository {
+	return &CollectibleRepository{
+		collection: db.Collection("collectibles"),
+	}
 }
 
 func (r *CollectibleRepository) Create(collectible *models.Collectible) error {
-	return r.db.Create(collectible).Error
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	now := time.Now()
+
+	if collectible.ID == "" {
+		collectible.ID = uuid.New().String()
+	}
+	if collectible.CreatedAt.IsZero() {
+		collectible.CreatedAt = now
+	}
+	collectible.UpdatedAt = now
+
+	_, err := r.collection.InsertOne(ctx, collectible)
+	return err
 }
 
-func (r *CollectibleRepository) GetAll(limit, offset int) ([]models.Collectible, int64, error) {
-	var collectibles []models.Collectible
-	var total int64
+func (r *CollectibleRepository) GetAllByUser(userID string, limit, offset int) ([]models.Collectible, int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	if err := r.db.Model(&models.Collectible{}).Count(&total).Error; err != nil {
+	filter := bson.M{
+		"user_id": userID,
+		"deleted_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	total, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
 		return nil, 0, err
 	}
 
-	if err := r.db.Limit(limit).Offset(offset).Find(&collectibles).Error; err != nil {
+	findOptions := options.Find().
+		SetLimit(int64(limit)).
+		SetSkip(int64(offset)).
+		SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := r.collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var collectibles []models.Collectible
+	if err := cursor.All(ctx, &collectibles); err != nil {
 		return nil, 0, err
 	}
 
@@ -34,15 +76,62 @@ func (r *CollectibleRepository) GetAll(limit, offset int) ([]models.Collectible,
 }
 
 func (r *CollectibleRepository) GetByID(id string) (*models.Collectible, error) {
-	var collectible models.Collectible
-	result := r.db.Where("id = ?", id).First(&collectible)
-	return &collectible, result.Error
-}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-func (r *CollectibleRepository) Delete(id string) error {
-	return r.db.Where("id = ?", id).Delete(&models.Collectible{}).Error
+	filter := bson.M{
+		"_id": id,
+		"deleted_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	var collectible models.Collectible
+	err := r.collection.FindOne(ctx, filter).Decode(&collectible)
+	if err != nil {
+		return nil, err
+	}
+
+	return &collectible, nil
 }
 
 func (r *CollectibleRepository) Update(collectible *models.Collectible) error {
-	return r.db.Save(collectible).Error
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collectible.UpdatedAt = time.Now()
+
+	filter := bson.M{
+		"_id": collectible.ID,
+		"deleted_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	_, err := r.collection.ReplaceOne(ctx, filter, collectible)
+	return err
+}
+
+func (r *CollectibleRepository) Delete(id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	now := time.Now()
+
+	filter := bson.M{
+		"_id": id,
+		"deleted_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"deleted_at": now,
+			"updated_at": now,
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, filter, update)
+	return err
 }

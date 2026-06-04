@@ -1,40 +1,42 @@
 package database
 
 import (
+	"context"
 	"fmt"
-	"newyear-api/models"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
-func Connect() (*gorm.DB, error) {
-	// Загружаем .env файл
-	godotenv.Load()
+func Connect() (*mongo.Database, error) {
+	_ = godotenv.Load()
 
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
+	mongoURI := os.Getenv("MONGO_URI")
+	dbName := os.Getenv("DB_NAME")
 
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		host,
-		port,
-		user,
-		password,
-		dbname,
-	)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	if mongoURI == "" {
+		return nil, fmt.Errorf("MONGO_URI is not set")
+	}
+	if dbName == "" {
+		return nil, fmt.Errorf("DB_NAME is not set")
 	}
 
-	db.AutoMigrate(&models.Collectible{})
+	client, err := mongo.Connect(options.Client().ApplyURI(mongoURI))
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to mongo: %w", err)
+	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx, readpref.Primary()); err != nil {
+		return nil, fmt.Errorf("failed to ping mongo: %w", err)
+	}
+
+	db := client.Database(dbName)
 	return db, nil
 }
